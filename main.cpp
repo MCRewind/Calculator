@@ -174,7 +174,7 @@ int convertStringToTokens(string &sInput, stTokens &tokenList) {
         tokenList.addData(TOKEN_DOUBLE,0);
     }
 
-    cout << "Converted string '" << sInput << "' to tokens successfully.\n";
+    //cout << "Converted string '" << sInput << "' to tokens successfully.\n";
     return NO_ERROR;
 }
 
@@ -236,97 +236,50 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
     //Find carets for exponents evaluation
     for (int i = tokens.types.size() - 1; i >= 0; --i) {
-        if(tokens.types.at(i) == TOKEN_POWER) {
+        switch(tokens.types.at(i)) {
+        case TOKEN_POWER:
             long double base = tokens.values.at(i-1);
             long double exp = tokens.values.at(i+1);
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = pow(base,exp);
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);            
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
+            tokens.setData(i,TOKEN_DOUBLE,pow(base,exp)); tokens.removePos(i-1); tokens.removePos(i); --i; break;
         }
     }
 
     //Now run functions, like sin, cos
     for (unsigned int i = 0; i < tokens.types.size(); ++i) {
         switch(tokens.types.at(i)) {
-        case TOKEN_SIN: tokens.setData(i,TOKEN_DOUBLE,sin(tokens.values.at(i+1))); tokens.removePos(i+1); break;
-        case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1))); tokens.removePos(i+1); break;
-        case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1))); tokens.removePos(i+1); break;
+        case TOKEN_SIN: tokens.setData(i,TOKEN_DOUBLE,sin(tokens.values.at(i+1))); tokens.removePos(i+1); --i; break;
+        case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1))); tokens.removePos(i+1); --i; break;
+        case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1))); tokens.removePos(i+1); --i; break;
         }
     }
 
     //Find multiplications and divisions
     for (unsigned int i = 0; i < tokens.types.size(); ++i) {
-        if(tokens.types.at(i) == TOKEN_MULTIPLY) {
-                              
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = tokens.values.at(i-1) * tokens.values.at(i+1);
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);            
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
-        } 
-        else
-        if(tokens.types.at(i) == TOKEN_DIVIDE_FLOAT) {
-                              
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = tokens.values.at(i-1) / tokens.values.at(i+1);
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
+        bool changeMade = false;
+        switch(tokens.types.at(i)) {
+        case TOKEN_MULTIPLY: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) * tokens.values.at(i+1)); changeMade = true; break;
+        case TOKEN_DIVIDE_FLOAT: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) / tokens.values.at(i+1)); changeMade = true; break;
+        case TOKEN_DIVIDE_INT: tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) / static_cast<int>(tokens.values.at(i+1))); changeMade = true; break;
+        case TOKEN_MODULO: tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) % static_cast<int>(tokens.values.at(i+1))); changeMade = true; break;
         }
-        else
-        if(tokens.types.at(i) == TOKEN_DIVIDE_INT) {
-
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = static_cast<int>(tokens.values.at(i-1)) / static_cast<int>(tokens.values.at(i+1));
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
-        }
-        else
-        if(tokens.types.at(i) == TOKEN_MODULO) {
-
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = static_cast<int>(tokens.values.at(i-1)) % static_cast<int>(tokens.values.at(i+1));
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
+        if(changeMade) {
+            tokens.removePos(i-1);
+            tokens.removePos(i);
+            --i;
         }
     }
     
     //And finally addition and subtraction
     for (unsigned int i = 0; i < tokens.types.size(); ++i) {
-        if(tokens.types.at(i) == TOKEN_PLUS) {
-
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = tokens.values.at(i-1) + tokens.values.at(i+1);
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
-        } 
-        else
-        if(tokens.types.at(i) == TOKEN_MINUS) {
-                              
-            tokens.types.at(i) = TOKEN_DOUBLE;
-            tokens.values.at(i) = tokens.values.at(i-1) - tokens.values.at(i+1);
-
-            tokens.types.erase(tokens.types.begin()+i-1);
-            tokens.values.erase(tokens.values.begin()+i-1);
-            tokens.types.erase(tokens.types.begin()+i);
-            tokens.values.erase(tokens.values.begin()+i);
+        bool changeMade = false;
+        switch(tokens.types.at(i)) {
+        case TOKEN_PLUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) + tokens.values.at(i+1)); changeMade = true; break;
+        case TOKEN_MINUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) - tokens.values.at(i+1)); changeMade = true; break;
+        }
+        if(changeMade) {
+            tokens.removePos(i-1);
+            tokens.removePos(i);
+            --i;
         }
     }
 
@@ -348,7 +301,7 @@ int main()
 
         if(convertStringToTokens(sLineIn, tokenList) == NO_ERROR) {
             if(evaluateTokens_rc(tokenList,calculatedResult) == NO_ERROR) {
-                cout << calculatedResult << endl;
+                cout << calculatedResult << endl << endl;
             }
         }
         
