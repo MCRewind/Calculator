@@ -217,9 +217,11 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
     //Insert * between any TOKEN_DOUBLE and TOKEN_LEFTBRACKET
     for (unsigned int i = 1; i < tokenList.types.size(); ++i) {
         if( (tokenList.types.at(i-1) == TOKEN_DOUBLE) && (tokenList.types.at(i) == TOKEN_LEFTBRACKET) ) tokenList.insertData(i,TOKEN_MULTIPLY);
+        if( (tokenList.types.at(i-1) == TOKEN_RIGHTBRACKET) && (tokenList.types.at(i) == TOKEN_DOUBLE) ) tokenList.insertData(i,TOKEN_MULTIPLY);
+        if( (tokenList.types.at(i-1) == TOKEN_RIGHTBRACKET) && (tokenList.types.at(i) == TOKEN_LEFTBRACKET) ) tokenList.insertData(i,TOKEN_MULTIPLY);
     }
 
-    tokenList.dumpData();
+    //tokenList.dumpData();
     //cout << "Converted string '" << sInput << "' to tokens successfully.\n";
     return NO_ERROR;
 }
@@ -360,7 +362,7 @@ int main()
 
         if(convertStringToTokens(sLineIn, tokenList, calculatedResult) == NO_ERROR) {
             if(evaluateTokens_rc(tokenList,calculatedResult) == NO_ERROR) {
-                tokenList.dumpData();
+                //tokenList.dumpData();
                 cout << calculatedResult << endl << endl;
             }
         }
