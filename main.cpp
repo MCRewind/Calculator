@@ -8,14 +8,15 @@
 
 using namespace std;
 
-enum { EMPTY_VALUE, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE_FLOAT, TOKEN_DIVIDE_INT, TOKEN_POWER, TOKEN_LEFTBRACKET, TOKEN_RIGHTBRACKET, TOKEN_MODULO, TOKEN_DOUBLE };
+enum { EMPTY_VALUE, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE_FLOAT, TOKEN_DIVIDE_INT, TOKEN_POWER, TOKEN_LEFTBRACKET, TOKEN_RIGHTBRACKET, TOKEN_MODULO, TOKEN_DOUBLE,
+       TOKEN_SPACE, TOKEN_SIN, TOKEN_COS, TOKEN_TAN };
 enum { NO_ERROR, EMPTY_BRACKETS, ERROR_ILLEGAL_STR, ERROR_SECOND_DECIMAL, ERROR_UNEXPECTED_DECIMAL, ERROR_FAULTY_END, ERROR_MISMATCHED_BRACKETS };
 
 
 char a_allowedChars[] = {'+','-','*','/','0','1','2','3','4','5','6','7','8','9','(',')','^','.','%'};
 set<char> allowedCharsSet (a_allowedChars,a_allowedChars+19);
-string a_allowedWords[] = {"div"};
-set<string> allowedWordsSet (a_allowedWords, a_allowedWords+1);
+//string a_allowedWords[] = {"div"};
+//set<string> allowedWordsSet (a_allowedWords, a_allowedWords+1);
 
 struct stTokens {
        vector<long double> values;
@@ -38,7 +39,22 @@ struct stTokens {
            types.push_back(tokenType);
            values.push_back(value);
        }
+       void setData(int pos, int tokenType, long double value) {
+           types.at(pos) = tokenType;
+           values.at(pos) = value;
+       }
 };
+
+/**
+  Stop searching through the string for extra characters to add to the current string, and place the number as a single value to our tokenList
+  */
+inline void addDoubleFromString(stTokens &tokenList, bool &numString, bool &foundDec, string input) {
+    if(numString) {
+        tokenList.addData(TOKEN_DOUBLE,atof(input.c_str()));
+        numString = false;
+        foundDec = false;
+    }
+}
 
 int convertStringToTokens(string &sInput, stTokens &tokenList) {
 
@@ -73,11 +89,12 @@ int convertStringToTokens(string &sInput, stTokens &tokenList) {
                 return ERROR_UNEXPECTED_DECIMAL;
             }
         }
+        else if(isspace(sInput.at(i))) {
+            //DO ABSOLUTELY NOTHING
+        }
         else if(allowedCharsSet.find(sInput.at(i)) == allowedCharsSet.end()) {
             //We've found a letter, it could be part of a function. Find the whole word, and then see if it's an allowed word.
-            tokenList.addData(TOKEN_DOUBLE,atof(stNumber.c_str()));
-            blNumberString = false;
-            blFoundDecimal = false;
+            addDoubleFromString(tokenList, blNumberString,blFoundDecimal,stNumber);
 
             string stWordBuffer;
             while( (allowedCharsSet.find(sInput.at(i)) == allowedCharsSet.end()) && (i != sInput.length()) ) {
@@ -91,6 +108,15 @@ int convertStringToTokens(string &sInput, stTokens &tokenList) {
             else if(stWordBuffer == "mod") {
                 tokenList.addData(TOKEN_MODULO);
             }
+            else if(stWordBuffer == "sin") {
+                tokenList.addData(TOKEN_SIN);
+            }
+            else if(stWordBuffer == "cos") {
+                tokenList.addData(TOKEN_COS);
+            }
+            else if(stWordBuffer == "tan") {
+                tokenList.addData(TOKEN_TAN);
+            }
             else {
                 cout << "An illegal set of characters, '" << stWordBuffer << "' was found at position " << i+1 << ", could not evaluate expression.\n";
                 return ERROR_ILLEGAL_STR;
@@ -99,36 +125,42 @@ int convertStringToTokens(string &sInput, stTokens &tokenList) {
             continue;
         }
         else { //Else add the appropriate token to the vector
-            if(blNumberString) {
-                tokenList.addData(TOKEN_DOUBLE,atof(stNumber.c_str()));
-                blNumberString = false;
-                blFoundDecimal = false;
-            }
+            addDoubleFromString(tokenList, blNumberString, blFoundDecimal,stNumber);
 
             switch (sInput.at(i)) {
-            case '+': tokenList.types.push_back(TOKEN_PLUS); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '-': tokenList.types.push_back(TOKEN_MINUS); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '*': tokenList.types.push_back(TOKEN_MULTIPLY); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '/': tokenList.types.push_back(TOKEN_DIVIDE_FLOAT); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '^': tokenList.types.push_back(TOKEN_POWER); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '(': tokenList.types.push_back(TOKEN_LEFTBRACKET); tokenList.values.push_back(EMPTY_VALUE); break;
-            case ')': tokenList.types.push_back(TOKEN_RIGHTBRACKET); tokenList.values.push_back(EMPTY_VALUE); break;
-            case '%': tokenList.types.push_back(TOKEN_MODULO); tokenList.values.push_back(EMPTY_VALUE); break;
+            case '+': tokenList.addData(TOKEN_PLUS); break;
+            case '-': tokenList.addData(TOKEN_MINUS); break;
+            case '*': tokenList.addData(TOKEN_MULTIPLY); break;
+            case '/': tokenList.addData(TOKEN_DIVIDE_FLOAT); break;
+            case '^': tokenList.addData(TOKEN_POWER); break;
+            case '(': tokenList.addData(TOKEN_LEFTBRACKET); break;
+            case ')': tokenList.addData(TOKEN_RIGHTBRACKET); break;
+            case '%': tokenList.addData(TOKEN_MODULO); break;
             }
         }
 
         ++i;
     }
     if(blNumberString) {
-        tokenList.types.push_back(TOKEN_DOUBLE);
-        tokenList.values.push_back(atof(stNumber.c_str()));        
-        blNumberString = false;
-        blFoundDecimal = false;
+        addDoubleFromString(tokenList, blNumberString,blFoundDecimal,stNumber);
+    }
+
+    //Remove spaces
+    unsigned int count = 0, deleted = 0;
+    while(count - deleted < tokenList.types.size()) {
+        if(tokenList.types.at(count-deleted) == TOKEN_SPACE) {
+            cout << "removed space\n";
+            tokenList.removePos(count-deleted);
+            ++deleted;
+        }
+        ++count;
     }
 
     //Perform various checks to ensure we don't have faulty token data that could mess up our calculation later
+
+    //Check for mismatched brackets
     int lBrackets = 0, rBrackets = 0;
-    for (int i = 0; i != tokenList.types.size(); ++i) {
+    for (unsigned int i = 0; i != tokenList.types.size(); ++i) {
         if(tokenList.types.at(i) == TOKEN_LEFTBRACKET) ++lBrackets;
         if(tokenList.types.at(i) == TOKEN_RIGHTBRACKET) ++rBrackets;
     }
@@ -136,12 +168,13 @@ int convertStringToTokens(string &sInput, stTokens &tokenList) {
         cout << "Number of left brackets does not match the number of right brackets.\n";
         return ERROR_MISMATCHED_BRACKETS;
     }
+
+    //Add a leading 0 to starting + or - tokens
     if( (tokenList.types.front() == TOKEN_PLUS) || (tokenList.types.front() == TOKEN_MINUS) ) {
-        tokenList.types.insert(tokenList.types.begin(),TOKEN_DOUBLE);
-        tokenList.values.insert(tokenList.values.begin(),EMPTY_VALUE);
+        tokenList.addData(TOKEN_DOUBLE,0);
     }
 
-    //cout << "Converted string '" << sInput << "' to tokens successfully.\n";
+    cout << "Converted string '" << sInput << "' to tokens successfully.\n";
     return NO_ERROR;
 }
 
@@ -183,10 +216,12 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
                 long double dblSmallerEvaluate;
                 int rsltSmallerEvaluate = evaluateTokens_rc(smallerEvaluation, dblSmallerEvaluate);
                 if(rsltSmallerEvaluate != NO_ERROR) {
+                    //There was an error found, so return that error code.
                     return rsltSmallerEvaluate;
                 }
-                tokens.values.at(posLeftBracket) = dblSmallerEvaluate;
+
                 tokens.types.at(posLeftBracket) = TOKEN_DOUBLE;
+                tokens.values.at(posLeftBracket) = dblSmallerEvaluate;
 
                 i = 0;
                 smallerEvaluation.values.clear();
@@ -195,7 +230,8 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
                 leftBracketsFound = 0;
                 rightBracketsFound = 0;
             }
-        } 
+        }
+
     }
 
     //Find carets for exponents evaluation
@@ -212,9 +248,17 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
             tokens.values.erase(tokens.values.begin()+i);
         }
     }
-    
+
+    //Now run functions, like sin, cos
+    for (unsigned int i = 0; i < tokens.types.size(); ++i) {
+        switch(tokens.types.at(i)) {
+        case TOKEN_SIN: tokens.setData(i,TOKEN_DOUBLE,sin(tokens.values.at(i+1))); tokens.removePos(i+1); break;
+        case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1))); tokens.removePos(i+1); break;
+        case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1))); tokens.removePos(i+1); break;
+        }
+    }
+
     //Find multiplications and divisions
-    tokens.dumpData();
     for (unsigned int i = 0; i < tokens.types.size(); ++i) {
         if(tokens.types.at(i) == TOKEN_MULTIPLY) {
                               
@@ -292,11 +336,12 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
 int main()
 {
-    cout.precision(100);
+    cout.precision(10);
     cout << ">>> ";
 
     string sLineIn;
-    cin >> sLineIn;
+    getline(cin, sLineIn);
+
     while(sLineIn != "exit") {
         stTokens tokenList;
         long double calculatedResult;
