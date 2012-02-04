@@ -6,16 +6,19 @@
 #include <cmath>
 #include <vector>
 #include <set>
+#include <map>
 
-#define ALLOW_FOR_IMPLIED_MULTIPLICATION;
-//#define ALLOW_ZERO_TO_POWER_ZERO;
+#define ALLOW_FOR_IMPLIED_MULTIPLICATION
+//#define ALLOW_ZERO_TO_POWER_ZERO
 
 using namespace std;
 
 enum { EMPTY_VALUE, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE_FLOAT, TOKEN_DIVIDE_INT, TOKEN_POWER, TOKEN_LEFTBRACKET, TOKEN_RIGHTBRACKET, TOKEN_MODULO, TOKEN_DOUBLE,
        TOKEN_SPACE, TOKEN_SIN, TOKEN_COS, TOKEN_TAN, TOKEN_ABS, TOKEN_FACTORIAL, TOKEN_TO_TYPE };
 enum { NO_ERROR, EMPTY_BRACKETS, ERROR_ILLEGAL_STR, ERROR_SECOND_DECIMAL, ERROR_UNEXPECTED_DECIMAL, ERROR_FAULTY_START, ERROR_FAULTY_END, ERROR_MISMATCHED_BRACKETS,
-       ERROR_IMPLIED_MULTIPLICATION, ERROR_ZERO_TO_POWER_ZERO, ERROR_MOD_BY_ZERO, ERROR_INVALID_DATA_TO_FUNCTION };
+       ERROR_IMPLIED_MULTIPLICATION, ERROR_ZERO_TO_POWER_ZERO, ERROR_MOD_BY_ZERO, ERROR_INVALID_DATA_TO_FUNCTION, ERROR_FACTORIAL_NON_INTEGER, FINAL_ERROR };
+
+string errorMessages[FINAL_ERROR];
 
 const double m_pi = 3.14159265358979323846264338327950288419716939937510;
 const double m_e =  2.71828182845904523536028747135266249775724709369995;
@@ -53,6 +56,28 @@ struct stTokens {
            values.insert(values.begin()+pos, value);
        }
 };
+
+inline void setupErrorDictionary() {
+    //EMPTY_BRACKETS, ERROR_ILLEGAL_STR, ERROR_SECOND_DECIMAL, ERROR_UNEXPECTED_DECIMAL, ERROR_FAULTY_START, ERROR_FAULTY_END,
+           //ERROR_IMPLIED_MULTIPLICATION, ERROR_ZERO_TO_POWER_ZERO, ERROR_MOD_BY_ZERO, ERROR_INVALID_DATA_TO_FUNCTION, ERROR_FACTORIAL_NON_INTEGER, FINAL_ERROR
+    for(unsigned int i = NO_ERROR; i != FINAL_ERROR; ++i) {
+        //char * tempNum;
+        //itoa(i,tempNum,10);
+        //string stTempNum = tempNum;
+        errorMessages[i] = "Error found, but no message specified yet. Sorry!";
+    }
+    errorMessages[NO_ERROR] = "No error found - you shouldn't be able to see this message!\n";
+    errorMessages[ERROR_SECOND_DECIMAL] = "A second decimal point in a number was found (like 5.25.6), could not evaluate expression.\n;";
+    errorMessages[ERROR_UNEXPECTED_DECIMAL] = "An unexpected decimal point was found, could not evaluate expression.\n";
+    errorMessages[ERROR_ILLEGAL_STR] = "An illegal set of characters was found, could not evaluate expression. This could be a random letter or invalid character in your equation.\n";
+    errorMessages[ERROR_MISMATCHED_BRACKETS] = "Number of left brackets does not match the number of right brackets.\n";
+    errorMessages[ERROR_FAULTY_END] = "The final character (possibly within a bracket) was not a number or closing bracket.\n";
+    errorMessages[ERROR_FAULTY_START] = "The first character (possibly within a bracket) was not a number or appropriate function.\n";
+    errorMessages[ERROR_ZERO_TO_POWER_ZERO] = "0^0 can not be evaluated, somewhere within your equation.";
+    errorMessages[ERROR_FACTORIAL_NON_INTEGER] = "Cannot factorialise a non-integer number.\n";
+    errorMessages[ERROR_INVALID_DATA_TO_FUNCTION] = "Invalid data given to a function. (Maybe you need to add brackets?)\n";
+    errorMessages[ERROR_MOD_BY_ZERO] = "Cannot modulo by 0.\n";
+}
 
 /**
   Stop searching through the string for extra characters to add to the current string, and place the number as a single value to our tokenList
@@ -106,14 +131,12 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
         else if(sInput.at(i) == '.') {
             if(blNumberString) {
                 if(blFoundDecimal) {
-                    cout << "A second decimal point was found at position " << i+1 << ", could not evaluate expression.\n";
                     return ERROR_SECOND_DECIMAL;
                 } else {
                     blFoundDecimal = true;
                     stNumber += sInput.at(i);
                 }
             } else {
-                cout << "An unexpected decimal point was found at position " << i+1 << ", could not evaluate expression.\n";
                 return ERROR_UNEXPECTED_DECIMAL;
             }
         }
@@ -168,7 +191,6 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
                 tokenList.addData(TOKEN_DOUBLE, m_pi/180); //Convert radians to degrees
             }
             else {
-                cout << "An illegal set of characters, '" << stWordBuffer << "' was found at position " << i+1 << ", could not evaluate expression.\n";
                 return ERROR_ILLEGAL_STR;
             }
 
@@ -216,7 +238,6 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
         if(tokenList.types.at(i) == TOKEN_RIGHTBRACKET) ++rBrackets;
     }
     if(lBrackets != rBrackets) {
-        cout << "Number of left brackets does not match the number of right brackets.\n";
         return ERROR_MISMATCHED_BRACKETS;
     }
 
@@ -253,14 +274,12 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
     }
 
     if (! ((tokens.types.back() == TOKEN_DOUBLE) || (tokens.types.back() == TOKEN_RIGHTBRACKET) || (tokens.types.back() == TOKEN_FACTORIAL)) ) {
-        cout << "The final character (possibly within a bracket) was not a number or closing bracket.\n";
         result = 0;
         return ERROR_FAULTY_END;
     }
     if (! ((tokens.types.front() == TOKEN_DOUBLE) || (tokens.types.front() == TOKEN_LEFTBRACKET) || (tokens.types.front() == TOKEN_SIN) || (tokens.types.front() == TOKEN_COS)
            || (tokens.types.front() == TOKEN_TAN) || (tokens.types.front() == TOKEN_ABS)
            ) ) {
-        cout << "The first character (possibly within a bracket) was not a number or appropriate function.\n";
         result = 0;
         return ERROR_FAULTY_START;
     }
@@ -311,23 +330,6 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
     }
 
-    //Find carets for exponents evaluation
-    for (int i = tokens.types.size() - 1; i >= 0; --i) {
-        switch(tokens.types.at(i)) {
-        case TOKEN_POWER:
-            long double base = tokens.values.at(i-1);
-            long double exp = tokens.values.at(i+1);
-#ifndef ALLOW_ZERO_TO_POWER_ZERO
-            if ((base == exp) && (base == 0)) {
-                cout << "0^0 is not possible around position #" << i << endl;
-                return ERROR_ZERO_TO_POWER_ZERO;
-            }
-#endif
-            tokens.setData(i,TOKEN_DOUBLE,pow(base,exp)); tokens.removePos(i-1); tokens.removePos(i); --i; break;
-        }
-    }
-
-
     //Now run functions, like sin, cos
     for (unsigned int i = 0; i < tokens.types.size(); ++i) {
         int changeMade = 0;
@@ -336,11 +338,14 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1))); changeMade = 1; break;
         case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1))); changeMade = 1; break;
         case TOKEN_ABS: tokens.setData(i,TOKEN_DOUBLE,abs(tokens.values.at(i+1))); changeMade = 1; break;
-        case TOKEN_FACTORIAL: tokens.setData(i,TOKEN_DOUBLE,factorial(static_cast<int>(tokens.values.at(i-1)))); changeMade = 2; break;
+        case TOKEN_FACTORIAL:
+            if( (static_cast<int>(tokens.values.at(i-1))) != tokens.values.at(i-1) ) {
+                return ERROR_FACTORIAL_NON_INTEGER;
+            }
+            tokens.setData(i,TOKEN_DOUBLE,factorial(static_cast<int>(tokens.values.at(i-1)))); changeMade = 2; break;
         }
         if(changeMade == 1) {
             if(tokens.types.at(i+1) != TOKEN_DOUBLE) {
-                cout << "Invalid data given to a function. (Maybe you need to add brackets?)\n";
                 return ERROR_INVALID_DATA_TO_FUNCTION;
             }
             tokens.removePos(i+1);
@@ -348,11 +353,25 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         }
         else if(changeMade == 2) {
             if(tokens.types.at(i-1) != TOKEN_DOUBLE) {
-                cout << "Invalid data given to a function.\n";
                 return ERROR_INVALID_DATA_TO_FUNCTION;
             }
             tokens.removePos(i-1);
             --i;
+        }
+    }
+
+    //Find carets for exponents evaluation
+    for (int i = tokens.types.size() - 1; i >= 0; --i) {
+        switch(tokens.types.at(i)) {
+        case TOKEN_POWER:
+            long double base = tokens.values.at(i-1);
+            long double exp = tokens.values.at(i+1);
+#ifndef ALLOW_ZERO_TO_POWER_ZERO
+            if ((base == exp) && (base == 0)) {
+                return ERROR_ZERO_TO_POWER_ZERO;
+            }
+#endif
+            tokens.setData(i,TOKEN_DOUBLE,pow(base,exp)); tokens.removePos(i-1); tokens.removePos(i); --i; break;
         }
     }
 
@@ -365,7 +384,6 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         case TOKEN_DIVIDE_INT: tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) / static_cast<int>(tokens.values.at(i+1))); changeMade = true; break;
         case TOKEN_MODULO:
             if( (static_cast<int>(tokens.values.at(i+1))) == 0) {
-                cout << "Cannot modulo by 0.\n";
                 return ERROR_MOD_BY_ZERO;
             }
             tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) % static_cast<int>(tokens.values.at(i+1))); changeMade = true;
@@ -399,6 +417,7 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
 int main()
 {
     cout.precision(10);
+    setupErrorDictionary();
     cout << "Calculator program by Chris Winward. Type 'help' for instructions.\n";
     cout << ">>> ";
 
@@ -408,7 +427,7 @@ int main()
 
     while(sLineIn != "exit") {
         if(sLineIn == "help") {
-            cout << "This calculator uses BIFDMAS to calculate results - Brackets, Indices, Functions, Division & Multiplication, Addition & Subtraction.\n\n";
+            cout << "This calculator uses BFIDMAS to calculate results - Brackets, Functions, Indices, Division & Multiplication, Addition & Subtraction.\n\n";
             cout << "The following single digit operators are available:\n";
             cout << "* / + - ^ % ( ) !\n";
             cout << "/ refers to real division, ^ is raise to power, % is modulo operando, and ! is factorial.\n\n";
@@ -422,12 +441,19 @@ int main()
             cout << endl;
         } else {
             stTokens tokenList;
+            int errorMessage = convertStringToTokens(sLineIn, tokenList, calculatedResult);
+            if(errorMessage == NO_ERROR) {
 
-            if(convertStringToTokens(sLineIn, tokenList, calculatedResult) == NO_ERROR) {
-                if(evaluateTokens_rc(tokenList,calculatedResult) == NO_ERROR) {
+                errorMessage = evaluateTokens_rc(tokenList,calculatedResult);
+                if(errorMessage == NO_ERROR) {
                     //tokenList.dumpData();
                     cout << calculatedResult << endl << endl;
+                } else {
+                    cout << errorMessages[errorMessage];
                 }
+
+            } else {
+                cout << errorMessages[errorMessage];
             }
         }
 
