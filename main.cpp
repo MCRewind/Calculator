@@ -14,10 +14,12 @@
 using namespace std;
 
 enum { EMPTY_VALUE, TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE_FLOAT, TOKEN_DIVIDE_INT, TOKEN_POWER, TOKEN_LEFTBRACKET, TOKEN_RIGHTBRACKET, TOKEN_MODULO, TOKEN_DOUBLE,
-       TOKEN_STRING, TOKEN_SPACE, TOKEN_SIN, TOKEN_COS, TOKEN_TAN, TOKEN_ABS, TOKEN_FACTORIAL, TOKEN_TO_TYPE, TOKEN_LET, TOKEN_EQUALS, TOKEN_VARIABLE_ESTABLISHED, TOKEN_VARIABLE_NEW };
-enum { NO_ERROR, NO_ERROR_MATH_FUNCTION, NO_ERROR_VAR_ASSIGNMENT, EMPTY_BRACKETS, ERROR_ILLEGAL_STR, ERROR_SECOND_DECIMAL, ERROR_UNEXPECTED_DECIMAL, ERROR_FAULTY_START, ERROR_FAULTY_END,
+       TOKEN_STRING, TOKEN_SPACE, TOKEN_SIN, TOKEN_COS, TOKEN_TAN, TOKEN_ABS, TOKEN_FACTORIAL, TOKEN_TO_TYPE, TOKEN_LET, TOKEN_EQUALS, TOKEN_VARIABLE_ESTABLISHED, TOKEN_VARIABLE_NEW,
+       TOKEN_IS, TOKEN_GREATER, TOKEN_GREATER_EQ, TOKEN_LESS, TOKEN_LESS_EQ, TOKEN_BECOMES, TOKEN_EQUIVALENT };
+
+enum { NO_ERROR, NO_ERROR_MATH_FUNCTION, NO_ERROR_VAR_ASSIGNMENT, NO_ERROR_COMPARISON, EMPTY_BRACKETS, ERROR_ILLEGAL_STR, ERROR_SECOND_DECIMAL, ERROR_UNEXPECTED_DECIMAL, ERROR_FAULTY_START, ERROR_FAULTY_END,
        ERROR_MISMATCHED_BRACKETS, ERROR_IMPLIED_MULTIPLICATION, ERROR_ZERO_TO_POWER_ZERO, ERROR_MOD_BY_ZERO, ERROR_INVALID_DATA_TO_FUNCTION, ERROR_FACTORIAL_NON_INTEGER,
-       ERROR_UNKNOWN_VARIABLE, ERROR_BAD_LET_USAGE, ERROR_BAD_ASSIGNMENT, ERROR_EQUALS_WITHOUT_LET, ERROR_9000, FINAL_ERROR };
+       ERROR_UNKNOWN_VARIABLE, ERROR_BAD_LET_USAGE, ERROR_BAD_ASSIGNMENT, ERROR_EQUALS_WITHOUT_LET, ERROR_BAD_IS_USAGE, ERROR_9000, FINAL_ERROR };
 
 string errorMessages[FINAL_ERROR];
 
@@ -29,9 +31,9 @@ set<char> allowedCharsSet (a_allowedChars,a_allowedChars+50);
 
 map<string,int> tokenMap;
 map<char,int> operatorMap;
-map<string,long double> variableMap;
+std::map<string,long double> variableMap;
 map<string,long double> constMap;
-vector<string> vecVariablesNames;
+std::vector<string> vecVariablesNames;
 
 struct stTokens {
        vector<long double> values;
@@ -103,13 +105,21 @@ inline void setupTokenMap() {
     operatorMap['%'] = TOKEN_MODULO;
     operatorMap['!'] = TOKEN_FACTORIAL;
     operatorMap['`'] = TOKEN_SPACE;
-    operatorMap['='] = TOKEN_EQUALS;
+    //operatorMap['='] = TOKEN_EQUALS;
     tokenMap["div"] = TOKEN_DIVIDE_INT;
     tokenMap["mod"] = TOKEN_MODULO;
     tokenMap["sin"] = TOKEN_SIN;
     tokenMap["cos"] = TOKEN_COS;
     tokenMap["tan"] = TOKEN_TAN;
     tokenMap["abs"] = TOKEN_ABS;
+    tokenMap["let"] = TOKEN_LET;
+    tokenMap["is"] = TOKEN_IS;
+    tokenMap[":="] = TOKEN_BECOMES;
+    tokenMap["=="] = TOKEN_EQUIVALENT;
+    tokenMap["<"] = TOKEN_LESS;
+    tokenMap["<="] = TOKEN_LESS_EQ;
+    tokenMap[">"] = TOKEN_GREATER;
+    tokenMap[">="] = TOKEN_GREATER_EQ;
 }
 
 inline void setupVariableMap() {
@@ -209,9 +219,6 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
             if(stWordBuffer == "ans") { //Special override keywords first
                 tokenList.addData(TOKEN_DOUBLE, previousAnswer);
             }
-            else if(stWordBuffer == "let") { //Special override keywords first
-                tokenList.addData(TOKEN_LET, previousAnswer);
-            }
             else if(operatorMap.find(stWordBuffer.at(0)) != operatorMap.end()) { //Check if it's an operator
                 tokenList.addData(operatorMap[stWordBuffer.at(0)]); //Use the first character of the string
             }
@@ -289,6 +296,14 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
     return NO_ERROR;
 }
 
+long double* getVariable(string variableName) {
+    return &variableMap[variableName];
+}
+
+long double* getVariable(long double variablePos) {
+    return &variableMap[vecVariablesNames.at(variablePos)];
+}
+
 int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
     //tokens.dumpData();
@@ -300,14 +315,14 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         //Assigning a variable, tokens should be in the form <assignment> ::= <variable> <equals> <number>|<variable>
         if (tokens.types.size() == 4) {
 
-            if( ( (tokens.types.at(1) == TOKEN_VARIABLE_NEW) || (tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED) ) && (tokens.types.at(2) == TOKEN_EQUALS) ) {
+            if( ( (tokens.types.at(1) == TOKEN_VARIABLE_NEW) || (tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED) ) && (tokens.types.at(2) == TOKEN_BECOMES) ) {
 
                 if(tokens.types.at(3) == TOKEN_DOUBLE) {
-                    variableMap.at(vecVariablesNames.at(tokens.values.at(1))) = tokens.values.at(3);
+                    *getVariable(tokens.values.at(1)) = tokens.values.at(3);
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else if(tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED) {
-                    variableMap.at(vecVariablesNames.at(tokens.values.at(1))) = variableMap[vecVariablesNames.at(tokens.values.at(3))];
+                    *getVariable(tokens.values.at(1)) = *getVariable(tokens.values.at(3));
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else {
@@ -320,6 +335,30 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         }
         else {
             return ERROR_BAD_LET_USAGE;
+        }
+    }
+    else if( tokens.types.front() == TOKEN_IS) {
+        //Comparing values, tokens should be in the form <comparison> ::= <number>|<variable> <equals> <number>|<variable>
+        if (tokens.types.size() == 4) {
+            if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(tokens.values.at(1))); }
+            if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(tokens.values.at(1))); }
+
+            if (!( (tokens.types.at(1) == TOKEN_DOUBLE) && (tokens.types.at(3) == TOKEN_DOUBLE) )) {
+                return ERROR_BAD_IS_USAGE;
+            }
+
+            switch(tokens.types.at(2)) {
+            case TOKEN_EQUIVALENT: if(tokens.values.at(1) == tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            case TOKEN_GREATER: if(tokens.values.at(1) > tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            case TOKEN_LESS: if(tokens.values.at(1) < tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            case TOKEN_GREATER_EQ: if(tokens.values.at(1) >= tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            case TOKEN_LESS_EQ: if(tokens.values.at(1) <= tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            }
+
+            return NO_ERROR_COMPARISON;
+        }
+        else {
+            return ERROR_BAD_IS_USAGE;
         }
     }
     else {
@@ -535,6 +574,7 @@ int main()
                 switch(errorMessage) {
                 case NO_ERROR_VAR_ASSIGNMENT: break;
                 case NO_ERROR_MATH_FUNCTION: cout << endl << ">>>>>> " << calculatedResult << endl; break;
+                case NO_ERROR_COMPARISON: cout << endl << ">>>>>> " << (bool)calculatedResult << endl; break;
                 default: cout << errorMessages[errorMessage]; break;
                 }
 
