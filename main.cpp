@@ -35,8 +35,14 @@ std::map<string,long double> variableMap;
 map<string,long double> constMap;
 std::vector<string> vecVariablesNames;
 
+union stTokensValues{
+    long double v_dbl;
+    int v_int;
+    string * v_varname;
+};
+
 struct stTokens {
-       vector<long double> values;
+       vector<stTokensValues> values;
        vector<int> types;
        void removePos(int pos) {
            values.erase(values.begin()+pos);
@@ -48,21 +54,22 @@ struct stTokens {
        }
        void dumpData() {
            for (unsigned int i = 0; i != values.size(); ++i) {
-               cout << "#" << i << ": " << types.at(i) << ", " << values.at(i) << endl;
+               cout << "#" << i << ": " << types.at(i) << ", " << values.at(i).v_dbl << endl;
            }
            cout << "Dump complete\n";
        }
        void addData(int tokenType, long double value = EMPTY_VALUE) {
            types.push_back(tokenType);
-           values.push_back(value);
+           values.push_back(*(new stTokensValues));
+           values.back().v_dbl = value;
        }
        void setData(int pos, int tokenType, long double value) {
            types.at(pos) = tokenType;
-           values.at(pos) = value;
+           values.at(pos).v_dbl = value;
        }
        void insertData(int pos, int tokenType, long double value = EMPTY_VALUE) {
            types.insert(types.begin()+pos, tokenType);
-           values.insert(values.begin()+pos, value);
+           values.insert(values.begin()+pos, *(new stTokensValues));
        }
 };
 
@@ -306,8 +313,6 @@ long double* getVariable(long double variablePos) {
 
 int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
-    //tokens.dumpData();
-
     if(tokens.values.size() == 0) { result = 0; return EMPTY_BRACKETS; }
 
     //First let's see whether we're going to be performing a maths equation or a programming construct - like assigning a variable
@@ -318,11 +323,11 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
             if( ( (tokens.types.at(1) == TOKEN_VARIABLE_NEW) || (tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED) ) && (tokens.types.at(2) == TOKEN_BECOMES) ) {
 
                 if(tokens.types.at(3) == TOKEN_DOUBLE) {
-                    *getVariable(tokens.values.at(1)) = tokens.values.at(3);
+                    *getVariable(tokens.values.at(1).v_dbl) = tokens.values.at(3).v_dbl;
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else if(tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED) {
-                    *getVariable(tokens.values.at(1)) = *getVariable(tokens.values.at(3));
+                    *getVariable(tokens.values.at(1).v_dbl) = *getVariable(tokens.values.at(3).v_dbl);
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else {
@@ -330,29 +335,31 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
                 }
 
             } else {
+                cout << "a\n";
                 return ERROR_BAD_LET_USAGE;
             }
         }
         else {
+            cout << "b\n";
             return ERROR_BAD_LET_USAGE;
         }
     }
     else if( tokens.types.front() == TOKEN_IS) {
         //Comparing values, tokens should be in the form <comparison> ::= <number>|<variable> <equals> <number>|<variable>
         if (tokens.types.size() == 4) {
-            if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(tokens.values.at(1))); }
-            if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(tokens.values.at(1))); }
+            if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
+            if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
 
             if (!( (tokens.types.at(1) == TOKEN_DOUBLE) && (tokens.types.at(3) == TOKEN_DOUBLE) )) {
                 return ERROR_BAD_IS_USAGE;
             }
 
             switch(tokens.types.at(2)) {
-            case TOKEN_EQUIVALENT: if(tokens.values.at(1) == tokens.values.at(3)) { result = 1; } else { result = 0; } break;
-            case TOKEN_GREATER: if(tokens.values.at(1) > tokens.values.at(3)) { result = 1; } else { result = 0; } break;
-            case TOKEN_LESS: if(tokens.values.at(1) < tokens.values.at(3)) { result = 1; } else { result = 0; } break;
-            case TOKEN_GREATER_EQ: if(tokens.values.at(1) >= tokens.values.at(3)) { result = 1; } else { result = 0; } break;
-            case TOKEN_LESS_EQ: if(tokens.values.at(1) <= tokens.values.at(3)) { result = 1; } else { result = 0; } break;
+            case TOKEN_EQUIVALENT: if(tokens.values.at(1).v_dbl == tokens.values.at(3).v_dbl) { result = 1; } else { result = 0; } break;
+            case TOKEN_GREATER: if(tokens.values.at(1).v_dbl > tokens.values.at(3).v_dbl) { result = 1; } else { result = 0; } break;
+            case TOKEN_LESS: if(tokens.values.at(1).v_dbl < tokens.values.at(3).v_dbl) { result = 1; } else { result = 0; } break;
+            case TOKEN_GREATER_EQ: if(tokens.values.at(1).v_dbl >= tokens.values.at(3).v_dbl) { result = 1; } else { result = 0; } break;
+            case TOKEN_LESS_EQ: if(tokens.values.at(1).v_dbl <= tokens.values.at(3).v_dbl) { result = 1; } else { result = 0; } break;
             }
 
             return NO_ERROR_COMPARISON;
@@ -372,14 +379,14 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         int unknownCount = 0;
         for (unsigned int i = 0; i < tokens.types.size(); ++i) {
             if(tokens.types.at(i) == TOKEN_VARIABLE_ESTABLISHED) {
-                if(variableMap.find(vecVariablesNames.at(tokens.values.at(i))) != variableMap.end()) {
-                    tokens.setData(i,TOKEN_DOUBLE,variableMap[vecVariablesNames.at(tokens.values.at(i))]);
+                if(variableMap.find(vecVariablesNames.at(tokens.values.at(i).v_dbl)) != variableMap.end()) {
+                    tokens.setData(i,TOKEN_DOUBLE,variableMap[vecVariablesNames.at(tokens.values.at(i).v_dbl)]);
                 }
             }
             else if(tokens.types.at(i) == TOKEN_VARIABLE_NEW) {
                 //Just clear out this variable's place in the variableNames and variableMap lists
-                string tempName = vecVariablesNames.at(tokens.values.at(i-unknownCount));
-                vecVariablesNames.erase(vecVariablesNames.begin()+ tokens.values.at(i-unknownCount));
+                string tempName = vecVariablesNames.at(tokens.values.at(i-unknownCount).v_dbl);
+                vecVariablesNames.erase(vecVariablesNames.begin()+ tokens.values.at(i-unknownCount).v_dbl);
                 variableMap.erase(tempName);
                 ++unknownCount;
             }
@@ -418,11 +425,13 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
 
             if(tokens.types.at(i) == TOKEN_LEFTBRACKET) {
                 ++leftBracketsFound;
+                cout << leftBracketsFound << " left brackets found.\n";
                 if(leftBracketsFound == 1)
                     posLeftBracket = i;
             }
             else if(tokens.types.at(i) == TOKEN_RIGHTBRACKET) {
                 ++rightBracketsFound;
+                cout << rightBracketsFound << " right brackets found.\n";
                 if( (leftBracketsFound == rightBracketsFound) && (rightBracketsFound > 0) ) {
                     posRightBracket = i;
                     //Remove the brackets and contents
@@ -431,13 +440,15 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
                     //Evaluate the brackets and insert that into the tokens
                     long double dblSmallerEvaluate;
                     int rsltSmallerEvaluate = evaluateTokens_rc(smallerEvaluation, dblSmallerEvaluate);
-                    if(rsltSmallerEvaluate != NO_ERROR) {
+                    if (!( (rsltSmallerEvaluate == NO_ERROR_MATH_FUNCTION) || (rsltSmallerEvaluate == NO_ERROR) )) {
                         //There was an error found, so return that error code.
                         return rsltSmallerEvaluate;
                     }
 
                     tokens.types.at(posLeftBracket) = TOKEN_DOUBLE;
-                    tokens.values.at(posLeftBracket) = dblSmallerEvaluate;
+                    tokens.values.at(posLeftBracket).v_dbl = dblSmallerEvaluate;
+
+                    tokens.dumpData();
 
                     i = 0;
                     smallerEvaluation.values.clear();
@@ -454,15 +465,15 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         for (unsigned int i = 0; i < tokens.types.size(); ++i) {
             int changeMade = 0;
             switch(tokens.types.at(i)) {
-            case TOKEN_SIN: tokens.setData(i,TOKEN_DOUBLE,sin(tokens.values.at(i+1))); changeMade = 1; break;
-            case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1))); changeMade = 1; break;
-            case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1))); changeMade = 1; break;
-            case TOKEN_ABS: tokens.setData(i,TOKEN_DOUBLE,abs(tokens.values.at(i+1))); changeMade = 1; break;
+            case TOKEN_SIN: tokens.setData(i,TOKEN_DOUBLE,sin(tokens.values.at(i+1).v_dbl)); changeMade = 1; break;
+            case TOKEN_COS: tokens.setData(i,TOKEN_DOUBLE,cos(tokens.values.at(i+1).v_dbl)); changeMade = 1; break;
+            case TOKEN_TAN: tokens.setData(i,TOKEN_DOUBLE,tan(tokens.values.at(i+1).v_dbl)); changeMade = 1; break;
+            case TOKEN_ABS: tokens.setData(i,TOKEN_DOUBLE,abs(tokens.values.at(i+1).v_dbl)); changeMade = 1; break;
             case TOKEN_FACTORIAL:
-                if( (static_cast<int>(tokens.values.at(i-1))) != tokens.values.at(i-1) ) {
+                if( (static_cast<int>(tokens.values.at(i-1).v_dbl)) != tokens.values.at(i-1).v_dbl ) {
                     return ERROR_FACTORIAL_NON_INTEGER;
                 }
-                tokens.setData(i,TOKEN_DOUBLE,factorial(static_cast<int>(tokens.values.at(i-1)))); changeMade = 2; break;
+                tokens.setData(i,TOKEN_DOUBLE,factorial(static_cast<int>(tokens.values.at(i-1).v_dbl))); changeMade = 2; break;
             }
             if(changeMade == 1) {
                 if(tokens.types.at(i+1) != TOKEN_DOUBLE) {
@@ -484,8 +495,8 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         for (int i = tokens.types.size() - 1; i >= 0; --i) {
             switch(tokens.types.at(i)) {
             case TOKEN_POWER:
-                long double base = tokens.values.at(i-1);
-                long double exp = tokens.values.at(i+1);
+                long double base = tokens.values.at(i-1).v_dbl;
+                long double exp = tokens.values.at(i+1).v_dbl;
 #ifndef ALLOW_ZERO_TO_POWER_ZERO
                 if ((base == exp) && (base == 0)) {
                     return ERROR_ZERO_TO_POWER_ZERO;
@@ -499,14 +510,14 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         for (unsigned int i = 0; i < tokens.types.size(); ++i) {
             bool changeMade = false;
             switch(tokens.types.at(i)) {
-            case TOKEN_MULTIPLY: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) * tokens.values.at(i+1)); changeMade = true; break;
-            case TOKEN_DIVIDE_FLOAT: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) / tokens.values.at(i+1)); changeMade = true; break;
-            case TOKEN_DIVIDE_INT: tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) / static_cast<int>(tokens.values.at(i+1))); changeMade = true; break;
+            case TOKEN_MULTIPLY: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1).v_dbl * tokens.values.at(i+1).v_dbl); changeMade = true; break;
+            case TOKEN_DIVIDE_FLOAT: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1).v_dbl / tokens.values.at(i+1).v_dbl); changeMade = true; break;
+            case TOKEN_DIVIDE_INT: tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1).v_dbl) / static_cast<int>(tokens.values.at(i+1).v_dbl)); changeMade = true; break;
             case TOKEN_MODULO:
-                if( (static_cast<int>(tokens.values.at(i+1))) == 0) {
+                if( (static_cast<int>(tokens.values.at(i+1).v_dbl)) == 0) {
                     return ERROR_MOD_BY_ZERO;
                 }
-                tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1)) % static_cast<int>(tokens.values.at(i+1))); changeMade = true;
+                tokens.setData(i,TOKEN_DOUBLE,static_cast<int>(tokens.values.at(i-1).v_dbl) % static_cast<int>(tokens.values.at(i+1).v_dbl)); changeMade = true;
                 break;
             }
             if(changeMade) {
@@ -520,8 +531,8 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         for (unsigned int i = 0; i < tokens.types.size(); ++i) {
             bool changeMade = false;
             switch(tokens.types.at(i)) {
-            case TOKEN_PLUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) + tokens.values.at(i+1)); changeMade = true; break;
-            case TOKEN_MINUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1) - tokens.values.at(i+1)); changeMade = true; break;
+            case TOKEN_PLUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1).v_dbl + tokens.values.at(i+1).v_dbl); changeMade = true; break;
+            case TOKEN_MINUS: tokens.setData(i,TOKEN_DOUBLE,tokens.values.at(i-1).v_dbl - tokens.values.at(i+1).v_dbl); changeMade = true; break;
             }
             if(changeMade) {
                 tokens.removePos(i-1);
@@ -530,7 +541,7 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
             }
         }
 
-        result = tokens.values.at(0);
+        result = tokens.values.at(0).v_dbl;
         return NO_ERROR_MATH_FUNCTION;
     }
 
@@ -567,9 +578,6 @@ int main()
             stTokens tokenList;
             int errorMessage = convertStringToTokens(sLineIn, tokenList, calculatedResult);
             if(errorMessage == NO_ERROR) {
-
-                //tokenList.dumpData();
-
                 errorMessage = evaluateTokens_rc(tokenList,calculatedResult);
                 switch(errorMessage) {
                 case NO_ERROR_VAR_ASSIGNMENT: break;
