@@ -35,10 +35,15 @@ std::map<string,long double> variableMap;
 map<string,long double> constMap;
 std::vector<string> vecVariablesNames;
 
-union stTokensValues{
-    long double v_dbl;
-    int v_int;
-    string * v_varname;
+struct stTokensValues {
+    stTokensValues(long double n_dbl) { v_dbl = n_dbl; }
+    stTokensValues(int n_int) { v_int = n_int; }
+    stTokensValues(string * n_varname) { v_varname = n_varname; }
+    union {
+        long double v_dbl;
+        int v_int;
+        string * v_varname;
+    };
 };
 
 struct stTokens {
@@ -60,8 +65,15 @@ struct stTokens {
        }
        void addData(int tokenType, long double value = EMPTY_VALUE) {
            types.push_back(tokenType);
-           values.push_back(*(new stTokensValues));
-           values.back().v_dbl = value;
+           //values.push_back(*(new stTokensValues));
+           values.push_back(stTokensValues(value));
+           //values.back().v_dbl = value;
+       }
+       void addData(int tokenType, string * value) {
+           types.push_back(tokenType);
+           //values.push_back(*(new stTokensValues));
+           //values.back().v_varname = value;
+           values.push_back(stTokensValues(value));
        }
        void setData(int pos, int tokenType, long double value) {
            types.at(pos) = tokenType;
@@ -69,7 +81,8 @@ struct stTokens {
        }
        void insertData(int pos, int tokenType, long double value = EMPTY_VALUE) {
            types.insert(types.begin()+pos, tokenType);
-           values.insert(values.begin()+pos, *(new stTokensValues));
+           //values.insert(values.begin()+pos, *(new stTokensValues));
+           values.insert(values.begin()+pos, stTokensValues(0));
        }
 };
 
@@ -112,7 +125,6 @@ inline void setupTokenMap() {
     operatorMap['%'] = TOKEN_MODULO;
     operatorMap['!'] = TOKEN_FACTORIAL;
     operatorMap['`'] = TOKEN_SPACE;
-    //operatorMap['='] = TOKEN_EQUALS;
     tokenMap["div"] = TOKEN_DIVIDE_INT;
     tokenMap["mod"] = TOKEN_MODULO;
     tokenMap["sin"] = TOKEN_SIN;
@@ -242,12 +254,13 @@ int convertStringToTokens(string sInput, stTokens &tokenList, long double previo
                         break;
                     }
                 }
-                tokenList.addData(TOKEN_VARIABLE_ESTABLISHED,i);
+                tokenList.addData(TOKEN_VARIABLE_ESTABLISHED,&vecVariablesNames.at(i));
             }
             else {
-                tokenList.addData(TOKEN_VARIABLE_NEW,vecVariablesNames.size());
                 vecVariablesNames.push_back(stWordBuffer);
                 variableMap[stWordBuffer] = 0;
+                tokenList.addData(TOKEN_VARIABLE_NEW,&vecVariablesNames.back());
+                cout << vecVariablesNames.back() << endl;
             }
 
             continue;
@@ -323,11 +336,11 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
             if( ( (tokens.types.at(1) == TOKEN_VARIABLE_NEW) || (tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED) ) && (tokens.types.at(2) == TOKEN_BECOMES) ) {
 
                 if(tokens.types.at(3) == TOKEN_DOUBLE) {
-                    *getVariable(tokens.values.at(1).v_dbl) = tokens.values.at(3).v_dbl;
+                    *getVariable(*tokens.values.at(1).v_varname) = tokens.values.at(3).v_dbl;
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else if(tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED) {
-                    *getVariable(tokens.values.at(1).v_dbl) = *getVariable(tokens.values.at(3).v_dbl);
+                    *getVariable(*tokens.values.at(1).v_varname) = *getVariable(*tokens.values.at(3).v_varname);
                     return NO_ERROR_VAR_ASSIGNMENT;
                 }
                 else {
@@ -335,20 +348,20 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
                 }
 
             } else {
-                cout << "a\n";
                 return ERROR_BAD_LET_USAGE;
             }
         }
         else {
-            cout << "b\n";
             return ERROR_BAD_LET_USAGE;
         }
     }
     else if( tokens.types.front() == TOKEN_IS) {
         //Comparing values, tokens should be in the form <comparison> ::= <number>|<variable> <equals> <number>|<variable>
         if (tokens.types.size() == 4) {
-            if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
-            if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
+            //if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
+            //if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(tokens.values.at(1).v_dbl)); }
+            if( tokens.types.at(1) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(1,TOKEN_DOUBLE,*getVariable(*tokens.values.at(1).v_varname)); }
+            if( tokens.types.at(3) == TOKEN_VARIABLE_ESTABLISHED ) { tokens.setData(3,TOKEN_DOUBLE,*getVariable(*tokens.values.at(1).v_varname)); }
 
             if (!( (tokens.types.at(1) == TOKEN_DOUBLE) && (tokens.types.at(3) == TOKEN_DOUBLE) )) {
                 return ERROR_BAD_IS_USAGE;
@@ -380,12 +393,14 @@ int evaluateTokens_rc(stTokens &tokens, long double &result) {
         for (unsigned int i = 0; i < tokens.types.size(); ++i) {
             if(tokens.types.at(i) == TOKEN_VARIABLE_ESTABLISHED) {
                 if(variableMap.find(vecVariablesNames.at(tokens.values.at(i).v_dbl)) != variableMap.end()) {
-                    tokens.setData(i,TOKEN_DOUBLE,variableMap[vecVariablesNames.at(tokens.values.at(i).v_dbl)]);
+                    if(variableMap.find(*tokens.values.at(i).v_varname) != variableMap.end()) {
+                        tokens.setData(i,TOKEN_DOUBLE,*getVariable(*tokens.values.at(i).v_varname));
+                    }
                 }
             }
             else if(tokens.types.at(i) == TOKEN_VARIABLE_NEW) {
                 //Just clear out this variable's place in the variableNames and variableMap lists
-                string tempName = vecVariablesNames.at(tokens.values.at(i-unknownCount).v_dbl);
+                string tempName = *tokens.values.at(i-unknownCount).v_varname;//vecVariablesNames.at(tokens.values.at(i-unknownCount).v_dbl);
                 vecVariablesNames.erase(vecVariablesNames.begin()+ tokens.values.at(i-unknownCount).v_dbl);
                 variableMap.erase(tempName);
                 ++unknownCount;
